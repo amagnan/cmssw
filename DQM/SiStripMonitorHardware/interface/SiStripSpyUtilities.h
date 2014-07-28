@@ -16,6 +16,9 @@
 #include "CalibFormats/SiStripObjects/interface/SiStripDetCabling.h"
 #include "CondFormats/SiStripObjects/interface/SiStripPedestals.h"
 #include "CondFormats/SiStripObjects/interface/SiStripNoises.h"
+#include "CondFormats/DataRecord/interface/SiStripApvGainRcd.h"
+#include "CondFormats/SiStripObjects/interface/SiStripApvGain.h"
+#include "CalibFormats/SiStripObjects/interface/SiStripGain.h"
 
 // Other classes
 class EventSetup;
@@ -35,6 +38,14 @@ namespace sistrip {
       float baseline;
       std::pair<bool,bool> apvErrorBit;
       std::pair<uint8_t,uint8_t> apvAddress;
+
+      double Ratio(){
+	return (baseline - digitalLow) / (digitalHigh - digitalLow);
+      }
+
+      double Gain(){
+	return (digitalHigh - digitalLow) / 690. ;
+      }
     };
 
     struct FrameQuality {
@@ -55,7 +66,8 @@ namespace sistrip {
 
     edm::ESHandle<SiStripPedestals> getPedestalHandle(const edm::EventSetup& eventSetup);
     edm::ESHandle<SiStripNoises> getNoiseHandle(const edm::EventSetup& eventSetup);
-    
+    edm::ESHandle<SiStripApvGain> getGainHandle(const edm::EventSetup& iSetup);
+
     //fill variables from frame
     static const Frame extractFrameInfo(const edm::DetSetVector<SiStripRawDigi>::detset & channelDigis,
 					bool aPrintDebug=false);
@@ -81,18 +93,19 @@ namespace sistrip {
 					 const uint16_t threshold);
 
     static const uint16_t findTrailerBits(const edm::DetSetVector<SiStripRawDigi>::detset & channelDigis,
-					  const uint16_t threshold);
+					  const uint16_t threshold,
+					  const uint16_t firstHeaderBit);
 
     //find both APV addresses and error bits
     static const std::pair<bool,bool> 
       findAPVErrorBits(const edm::DetSetVector<SiStripRawDigi>::detset & channelDigis,
 		       const uint16_t threshold,
-		       const uint16_t aFirstBits);
+		       const uint16_t firstHeaderBit);
 
     static const std::pair<uint8_t,uint8_t> 
       findAPVAddresses(const edm::DetSetVector<SiStripRawDigi>::detset & channelDigis,
 		       const uint16_t threshold,
-		       const uint16_t aFirstBits);
+		       const uint16_t firstHeaderBit);
 
     static std::string print(const Frame & aFrame,
 			     std::string aErr);
@@ -123,6 +136,10 @@ namespace sistrip {
     //used to see if the noises have changed.
     uint32_t noiseCacheId_;
     edm::ESHandle<SiStripNoises> noiseHandle_;
+
+    //used to see if the gains have changed.
+    uint32_t gainCacheId_;
+    edm::ESHandle<SiStripApvGain> gainHandle_;
 
   };
     

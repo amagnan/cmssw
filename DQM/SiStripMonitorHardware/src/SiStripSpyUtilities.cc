@@ -117,6 +117,19 @@ namespace sistrip {
   }
 
 
+  edm::ESHandle<SiStripApvGain> SpyUtilities::getGainHandle(const edm::EventSetup& iSetup)
+   {
+     //check if new noise values are available
+     uint32_t lCacheId = iSetup.get<SiStripApvGainRcd>().cacheIdentifier();
+     if (lCacheId != gainCacheId_) {
+       iSetup.get<SiStripApvGainRcd>().get(gainHandle_);
+       gainCacheId_ = lCacheId;
+     }
+
+     return gainHandle_;
+   }
+
+
   const SpyUtilities::Frame 
   SpyUtilities::extractFrameInfo(const edm::DetSetVector<SiStripRawDigi>::detset & channelDigis,
 				 bool aPrintDebug)
@@ -135,7 +148,7 @@ namespace sistrip {
     lFrame.apvAddress.second = 0;
 
     uint16_t min = 0x3FF;
-    uint16_t max = 0;
+    uint16_t count = 0;
     edm::DetSetVector<SiStripRawDigi>::detset::const_iterator iDigi = channelDigis.begin();
     const edm::DetSetVector<SiStripRawDigi>::detset::const_iterator endChannelDigis = channelDigis.end();
 
@@ -144,26 +157,31 @@ namespace sistrip {
 
     if (iDigi == endChannelDigis) return lFrame;
 
-    for (; iDigi != endChannelDigis; ++iDigi) {
+    for (; iDigi != endChannelDigis; ++iDigi,++count) {
       const uint16_t val = iDigi->adc();
+      //first value should be digital low...
       if (val < min) min = val;
-      if (val > max) max = val;
+      //fix max to just above min and find first high:
+      if (val > min+50 && lFrame.firstHeaderBit==0) {
+	lFrame.digitalHigh = val;
+	lFrame.firstHeaderBit = count;
+      }
       if (val==0)     numzeroes++;
       if (val==0x3FF) numsats++;
-      lFrame.baseline += val;
+      //consider only payload: count firstHeader+6(header bits)+16(APVaddresses)+2(APVerrorbits)
+      if (lFrame.firstHeaderBit>0 && count >= lFrame.firstHeaderBit+24 && count<lFrame.firstHeaderBit+24+sistrip::STRIPS_PER_FEDCH ) lFrame.baseline += val;
     }
-
-    if (channelDigis.size()>0) lFrame.baseline = lFrame.baseline/channelDigis.size();
+    
+    lFrame.baseline = lFrame.baseline/sistrip::STRIPS_PER_FEDCH;
     lFrame.digitalLow = min;
-    lFrame.digitalHigh = max;
 
-    const uint16_t threshold = static_cast<uint16_t>( (2.0 * static_cast<double>(max-min)) / 3.0 );
+    const uint16_t threshold = static_cast<uint16_t>( (2.0 * static_cast<double>(lFrame.digitalHigh-lFrame.digitalLow)) / 3.0 );
 
     if (aPrintDebug){
 //       if ( edm::isDebugEnabled() ) {
 // 	LogDebug("SiStripSpyUtilities") << "Channel with key: " << lFrame.detId
-// 					<< " Min: " << min << " Max: " << max
-// 					<< " Range: " << (max-min) << " Threshold: " << threshold;
+// 					<< " Min: " << min << " Max: " << lFrame.digitalHigh
+// 					<< " Range: " << lFrame.digitalHigh-lFrame.digitalLow << " Threshold: " << threshold;
 //       }
       if (numzeroes>0 || numsats>0) {
 	edm::LogWarning("SiStripSpyUtilities") << "Channel with key: " << lFrame.detId << " has "
@@ -172,9 +190,9 @@ namespace sistrip {
       }
     }
 
+    //recheck whether we have 6 high in a row, i.e. header really found.
     lFrame.firstHeaderBit = findHeaderBits(channelDigis,threshold);
-    lFrame.firstTrailerBit = findTrailerBits(channelDigis,threshold);
-
+    lFrame.firstTrailerBit = findTrailerBits(channelDigis,threshold,lFrame.firstHeaderBit);
     lFrame.apvErrorBit = findAPVErrorBits(channelDigis,threshold,lFrame.firstHeaderBit);
     lFrame.apvAddress = findAPVAddresses(channelDigis,threshold,lFrame.firstHeaderBit);
   
@@ -303,7 +321,8 @@ namespace sistrip {
   }
 
   const uint16_t SpyUtilities::findTrailerBits(const edm::DetSetVector<SiStripRawDigi>::detset & channelDigis,
-					       const uint16_t threshold)
+					       const uint16_t threshold,
+					       const uint16_t firstHeaderBit)
   {
 
     // Loop over digis looking for last above threshold
@@ -313,7 +332,7 @@ namespace sistrip {
     //discard the first 30 values, which will have some digital high in them...
     //start searching from the expected position : sometimes after 24+256 samples,
     //normally at 6+24+256 if 6-bit low before tickmark header bits...
-    uint16_t count = 24+sistrip::STRIPS_PER_FEDCH;
+    uint16_t count = firstHeaderBit+24+sistrip::STRIPS_PER_FEDCH;
 
     if (count >= sistrip::SPY_SAMPLES_PER_CHANNEL) return sistrip::SPY_SAMPLES_PER_CHANNEL;
 
@@ -343,11 +362,11 @@ namespace sistrip {
   const std::pair<bool,bool> 
   SpyUtilities::findAPVErrorBits(const edm::DetSetVector<SiStripRawDigi>::detset & channelDigis,
 				 const uint16_t threshold,
-				 const uint16_t aFirstBits)
+				 const uint16_t firstHeaderBit)
   {
   
     // Loop over digis looking for firstHeader+6+16
-    uint16_t count = aFirstBits+22;
+    uint16_t count = firstHeaderBit+22;
 
     std::pair<bool,bool> lPair = std::pair<bool,bool>(false,false);
 
@@ -375,11 +394,11 @@ namespace sistrip {
   const std::pair<uint8_t,uint8_t> 
   SpyUtilities::findAPVAddresses(const edm::DetSetVector<SiStripRawDigi>::detset & channelDigis,
 				 const uint16_t threshold,
-				 const uint16_t aFirstBits)
+				 const uint16_t firstHeaderBit)
   {
   
     // Loop over digis looking for firstHeader+6
-    uint16_t count = aFirstBits+6;
+    uint16_t count = firstHeaderBit+6;
     std::pair<uint8_t,uint8_t> lPair = std::pair<uint8_t,uint8_t>(0,0);
 
     //check enough room to have 16 values....
