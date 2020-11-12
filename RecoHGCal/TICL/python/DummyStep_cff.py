@@ -10,7 +10,7 @@ from RecoHGCal.TICL.multiClustersFromTrackstersProducer_cfi import multiClusters
 
 filteredLayerClustersDummy = _filteredLayerClustersProducer.clone(
   clusterFilter = "ClusterFilterByAlgoAndSize",
-  min_cluster_size = 2, #inclusive
+  min_cluster_size = 1, #inclusive
   algo_number = 8,
   iteration_label = "Dummy"
 )
@@ -20,10 +20,14 @@ filteredLayerClustersDummy = _filteredLayerClustersProducer.clone(
 ticlTrackstersDummy = _trackstersProducer.clone(
   filtered_mask = cms.InputTag("filteredLayerClustersDummy", "Dummy"),
   seeding_regions = "ticlSeedingGlobal",
-  filter_on_categories = [2, 4], # filter muons and charged hadrons
-  pid_threshold = 0.0, # 0 means: do not filter
-  skip_layers = 0,
-  min_layers_per_trackster = 10,
+  filter_on_categories = [0, 1, 2, 3, 4, 5], # filter all
+  pid_threshold = -1.0, # -1 means: do not filter
+  skip_layers = 1,
+  max_missing_layers_in_trackster = 9999;
+  min_layers_per_trackster = 5,
+  shower_start_max_layer = 9999, #no maximum...
+  max_longitudinal_sigmaPCA = 9999, #inclusive
+  energy_em_over_total_threshold = 0.0,# inclusive
   min_cos_theta = -1., # Fully inclusive
   min_cos_pointing = -1., # Fully inclusive
   max_delta_time = -1.,
