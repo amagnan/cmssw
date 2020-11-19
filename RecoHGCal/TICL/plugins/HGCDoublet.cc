@@ -4,8 +4,11 @@ bool HGCDoublet::checkCompatibilityAndTag(std::vector<HGCDoublet> &allDoublets,
                                           const std::vector<int> &innerDoublets,
                                           const GlobalVector &refDir,
                                           const GlobalPoint &origin,
+					  int innerLayerId,
                                           float minCosTheta,
                                           float minCosPointing,
+					  int maxLayerCosTheta,
+					  int maxLayerCosPointing,
                                           bool debug) {
   int nDoublets = innerDoublets.size();
   int constexpr VSIZE = 4;
@@ -38,7 +41,7 @@ bool HGCDoublet::checkCompatibilityAndTag(std::vector<HGCDoublet> &allDoublets,
         ok[j] = 0;
         continue;
       }
-      ok[j] = areAligned(xi[j], yi[j], zi[j], xo, yo, zo, minCosTheta, minCosPointing, refDir, origin, debug);
+      ok[j] = areAligned(xi[j], yi[j], zi[j], xo, yo, zo, innerLayerId, minCosTheta, minCosPointing, maxLayerCosTheta, maxLayerCosPointing, refDir, origin, debug);
       if (debug) {
         LogDebug("HGCDoublet") << "Are aligned for InnerDoubletId: " << i + j << " is " << ok[j] << std::endl;
       }
@@ -70,8 +73,11 @@ int HGCDoublet::areAligned(double xi,
                            double xo,
                            double yo,
                            double zo,
+			   int innerLayerId,
                            float minCosTheta,
                            float minCosPointing,
+			   int maxLayerCosTheta,
+			   int maxLayerCosPointing,
                            const GlobalVector &refDir,
                            const GlobalPoint &origin,
                            bool debug) const {
@@ -144,7 +150,10 @@ int HGCDoublet::areAligned(double xi,
                            << " isWithinLimits: " << (cosTheta_pointing_origin > minCosPointing) << std::endl;
   }
 
-  return (cosTheta > minCosTheta) && (cosTheta_pointing > minCosPointing);
+  return ( ((innerLayerId<=maxLayerCosTheta && cosTheta > minCosTheta) ||
+	    innerLayerId>maxLayerCosTheta) && 
+	   ((innerLayerId<=maxLayerCosPointing && cosTheta_pointing > minCosPointing) || 
+	    innerLayerId>maxLayerCosPointing) );
 }
 
 void HGCDoublet::findNtuplets(std::vector<HGCDoublet> &allDoublets,

@@ -26,6 +26,8 @@ PatternRecognitionbyCA<TILES>::PatternRecognitionbyCA(const edm::ParameterSet &c
       max_out_in_hops_(conf.getParameter<int>("max_out_in_hops")),
       min_cos_theta_(conf.getParameter<double>("min_cos_theta")),
       min_cos_pointing_(conf.getParameter<double>("min_cos_pointing")),
+      maxLayer_costheta_(conf.getParameter<int>("maxLayer_costheta")),
+      maxLayer_cospointing_(conf.getParameter<int>("maxLayer_cospointing")),
       root_doublet_max_distance_from_seed_squared_(
           conf.getParameter<double>("root_doublet_max_distance_from_seed_squared")),
       etaLimitIncreaseWindow_(conf.getParameter<double>("etaLimitIncreaseWindow")),
@@ -99,6 +101,8 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
                                     1,
                                     min_cos_theta_,
                                     min_cos_pointing_,
+                                    maxLayer_costheta_,
+                                    maxLayer_cospointing_,
                                     root_doublet_max_distance_from_seed_squared_,
                                     etaLimitIncreaseWindow_,
                                     skip_layers_,

@@ -22,20 +22,23 @@ ticlTrackstersDummy = _trackstersProducer.clone(
   seeding_regions = "ticlSeedingGlobal",
   filter_on_categories = [0, 1, 2, 3, 4, 5], # filter all
   pid_threshold = -1.0, # -1 means: do not filter
-  skip_layers = 1,
-  max_missing_layers_in_trackster = 9999;
-  min_layers_per_trackster = 5,
+  skip_layers = 0,
+  max_missing_layers_in_trackster = 9999,
+  min_layers_per_trackster = 1,
   shower_start_max_layer = 9999, #no maximum...
   max_longitudinal_sigmaPCA = 9999, #inclusive
   energy_em_over_total_threshold = 0.0,# inclusive
-  min_cos_theta = -1., # Fully inclusive
-  min_cos_pointing = -1., # Fully inclusive
+  min_cos_theta = 0., # Fully inclusive
+  min_cos_pointing = 0., # Fully inclusive
+  maxLayer_cospointing = 999,
+  maxLayer_costheta = 999,
   max_delta_time = -1.,
-  algo_verbosity = 2,
+  algo_verbosity = 0,
   oneTracksterPerTrackSeed = False,
   promoteEmptyRegionToTrackster = False,
   itername = "DUMMY"
 )
+
 
 # MULTICLUSTERS
 
@@ -43,7 +46,8 @@ ticlMultiClustersFromTrackstersDummy = _multiClustersFromTrackstersProducer.clon
     Tracksters = "ticlTrackstersDummy"
 )
 
-ticlDummyStepTask = cms.Task(ticlSeedingGlobal
+ticlDummyStepTask = cms.Task(
+    ticlSeedingGlobal
     ,filteredLayerClustersDummy
     ,ticlTrackstersDummy
     ,ticlMultiClustersFromTrackstersDummy)

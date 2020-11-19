@@ -25,10 +25,14 @@ CloseByParticleGunProducer::CloseByParticleGunProducer(const ParameterSet& pset)
   ParameterSet defpset;
   ParameterSet pgun_params = pset.getParameter<ParameterSet>("PGunParameters");
 
-  fEnMax = pgun_params.getParameter<double>("EnMax");
-  fEnMin = pgun_params.getParameter<double>("EnMin");
-  fRMax = pgun_params.getParameter<double>("RMax");
-  fRMin = pgun_params.getParameter<double>("RMin");
+  //fEnMax = pgun_params.getParameter<double>("EnMax");
+  //fEnMin = pgun_params.getParameter<double>("EnMin");
+  fPtMax = pgun_params.getParameter<double>("PtMax");
+  fPtMin = pgun_params.getParameter<double>("PtMin");
+  fEtaMax = pgun_params.getParameter<double>("MaxEta");
+  fEtaMin = pgun_params.getParameter<double>("MinEta");
+  //fRMax = pgun_params.getParameter<double>("RMax");
+  //fRMin = pgun_params.getParameter<double>("RMin");
   fZMax = pgun_params.getParameter<double>("ZMax");
   fZMin = pgun_params.getParameter<double>("ZMin");
   fDelta = pgun_params.getParameter<double>("Delta");
@@ -69,8 +73,11 @@ void CloseByParticleGunProducer::produce(Event& e, const EventSetup& es) {
   }
 
   double phi = CLHEP::RandFlat::shoot(engine, fPhiMin, fPhiMax);
-  double fR = CLHEP::RandFlat::shoot(engine, fRMin, fRMax);
+  double fEta = CLHEP::RandFlat::shoot(engine, fEtaMin, fEtaMax);
   double fZ = CLHEP::RandFlat::shoot(engine, fZMin, fZMax);
+
+  //double fR = fEta>0 ? fZ*tan(2*atan(exp(-fEta))) : CLHEP::RandFlat::shoot(engine, fRMin, fRMax);
+  double fR = fZ*tan(2*atan(exp(-fEta)));
   double tmpPhi = phi;
   double tmpR = fR;
 
@@ -78,10 +85,15 @@ void CloseByParticleGunProducer::produce(Event& e, const EventSetup& es) {
     if (fOverlapping) {
       fR = CLHEP::RandFlat::shoot(engine, tmpR - fDelta, tmpR + fDelta);
       phi = CLHEP::RandFlat::shoot(engine, tmpPhi - fDelta / fR, tmpPhi + fDelta / fR);
-    } else
+    } else if (ip>0){
       phi += fDelta / fR;
+      if (phi > 3.14159) phi -= 2*3.14159;
+      if (phi < -3.14159) phi += 2*3.14159;
+    }
 
-    double fEn = CLHEP::RandFlat::shoot(engine, fEnMin, fEnMax);
+    //double fEn = CLHEP::RandFlat::shoot(engine, fEnMin, fEnMax);
+    double fPt = CLHEP::RandFlat::shoot(engine, fPtMin, fPtMax);
+    double fEn = fPt*cosh(fEta);
     int PartID = particles[ip];
     const HepPDT::ParticleData* PData = fPDGTable->particle(HepPDT::ParticleID(abs(PartID)));
     double mass = PData->mass().value();
@@ -90,9 +102,9 @@ void CloseByParticleGunProducer::produce(Event& e, const EventSetup& es) {
     if (mom2 > 0.) {
       mom = sqrt(mom2);
     }
-    double px = 0.;
-    double py = 0.;
-    double pz = mom;
+    double px = fEta>0 ? mom/cosh(fEta)*cos(phi) : 0.;
+    double py = fEta>0 ? mom/cosh(fEta)*sin(phi) : 0.;
+    double pz = fEta>0 ? mom*tanh(fEta) : mom;
     double energy = fEn;
 
     // Compute Vertex Position
@@ -104,7 +116,7 @@ void CloseByParticleGunProducer::produce(Event& e, const EventSetup& es) {
 
     HepMC::FourVector p(px, py, pz, energy);
     // If we are requested to be pointing to (0,0,0), correct the momentum direction
-    if (fPointing) {
+    if (fPointing && fEta<=0) {
       math::XYZVector direction(x, y, fZ);
       math::XYZVector momentum = direction.unit() * mom;
       p.setX(momentum.x());
