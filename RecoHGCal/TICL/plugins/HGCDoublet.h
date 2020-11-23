@@ -64,8 +64,12 @@ public:
   bool checkCompatibilityAndTag(std::vector<HGCDoublet> &allDoublets,
                                 const std::vector<int> &innerDoublets,
                                 const GlobalVector &refDir,
+                                const GlobalPoint &origin,
+				int innerLayerId,
                                 float minCosTheta,
                                 float minCosPointing = 1.,
+                                int maxLayerCosTheta = 999,
+                                int maxLayerCosPointing = 999,
                                 bool debug = false);
 
   int areAligned(double xi,
@@ -74,9 +78,13 @@ public:
                  double xo,
                  double yo,
                  double zo,
+		 int innerLayerId,
                  float minCosTheta,
                  float minCosPointing,
+		 int maxLayerCosTheta,
+		 int maxLayerCosPointing,
                  const GlobalVector &refDir,
+                 const GlobalPoint &origin,
                  bool debug = false) const;
 
   void findNtuplets(std::vector<HGCDoublet> &allDoublets,
