@@ -145,7 +145,7 @@ process.ticlTrackstersEM1 = cms.EDProducer(
     max_delta_time = cms.double(3),
     max_longitudinal_sigmaPCA = cms.double(9999),
     max_missing_layers_in_trackster = cms.int32(9999),
-    max_out_in_hops = cms.int32(4),
+    max_out_in_hops = cms.int32(1),
     mightGet = cms.optional.untracked.vstring,
     min_cos_pointing = cms.double(0.9),
     min_cos_theta = cms.double(0.97),
@@ -186,6 +186,15 @@ process.ticlTrackstersEM3relax = process.ticlTrackstersEM3.clone()
 process.ticlTrackstersEM3relax.maxLayer_cospointing = cms.int32(18)
 process.ticlTrackstersEM3relax.maxLayer_costheta = cms.int32(18)
 process.ticlTrackstersEM3relax.itername = cms.string('EM3relax')
+
+process.filteredLayerClustersEMDef = process.filteredLayerClustersEM.clone()
+process.filteredLayerClustersEMDef.LayerClustersInputMask = cms.InputTag("hgcalLayerClusters","InitialLayerClustersMask")
+process.filteredLayerClustersEMDef.iteration_label = cms.string('EMDef')
+
+process.ticlTrackstersEMDef = process.ticlTrackstersEM.clone()
+process.ticlTrackstersEMDef.filtered_mask = cms.InputTag("filteredLayerClustersEMDef","EMDef")
+process.ticlTrackstersEMDef.original_mask = cms.InputTag("hgcalLayerClusters","InitialLayerClustersMask")
+process.ticlTrackstersEMDef.itername = cms.string('EMDEF')
 
 process.ticlTrackstersDummy1 = process.ticlTrackstersDummy.clone()
 process.ticlTrackstersDummy1.filtered_mask = cms.InputTag("filteredLayerClustersEM1", "EM1")
@@ -234,7 +243,8 @@ process.ticl_step = cms.Path(
     process.ticlLayerTileProducer*
     process.ticlSeedingGlobal*process.filteredLayerClustersEM1*process.ticlTrackstersDummy1*process.ticlTrackstersEM1*process.ticlTrackstersEM1relax*
     process.ticlSeedingGlobal*process.filteredLayerClustersEM2*process.ticlTrackstersDummy2*process.ticlTrackstersEM2*process.ticlTrackstersEM2relax*
-    process.ticlSeedingGlobal*process.filteredLayerClustersEM3*process.ticlTrackstersDummy3*process.ticlTrackstersEM3*process.ticlTrackstersEM3relax
+    process.ticlSeedingGlobal*process.filteredLayerClustersEM3*process.ticlTrackstersDummy3*process.ticlTrackstersEM3*process.ticlTrackstersEM3relax*
+    process.ticlSeedingGlobal*process.filteredLayerClustersEMDef*process.ticlTrackstersEMDef
 )
 
 process.FEVTTICLoutput_step = cms.EndPath(process.FEVTTICLoutput)
