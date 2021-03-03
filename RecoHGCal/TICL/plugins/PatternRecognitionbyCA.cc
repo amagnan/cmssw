@@ -108,8 +108,7 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
                                     rhtools_.lastLayer(type),
                                     max_delta_time_);
 
-  theGraph_->findNtuplets(
-      foundNtuplets, seedIndices, min_clusters_per_ntuplet_, out_in_dfs_, max_out_in_hops_, outInHopsV);
+  theGraph_->findNtuplets(foundNtuplets, seedIndices, min_clusters_per_ntuplet_, out_in_dfs_, max_out_in_hops_, outInHopsV);
   //#ifdef FP_DEBUG
   const auto &doublets = theGraph_->getAllDoublets();
   int tracksterId = -1;
@@ -189,24 +188,16 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
 
       tmp.setOutInHopsPerformed(outInHopsV[tracksterId]);
 
-      // Propagate the correct graph connections
-      tmp.edges().reserve(ntuplet.size());
-      for (auto const & t : ntuplet) {
-        std::array<unsigned int, 2> edge = {{(unsigned int) doublets[t].innerClusterId(),
-                                            (unsigned int) doublets[t].outerClusterId()}};
-        tmp.edges().push_back(edge);
-      }
-
-      std::pair<float, float> timeTrackster(-99., -1.);
-      hgcalsimclustertime::ComputeClusterTime timeEstimator;
-      timeTrackster = timeEstimator.fixSizeHighestDensity(times, timeErrors);
-      tmp.setTimeAndError(timeTrackster.first, timeTrackster.second);
       std::copy(std::begin(effective_cluster_idx), std::end(effective_cluster_idx), std::back_inserter(tmp.vertices()));
       tmpTracksters.push_back(tmp);
     }
   }
-  ticl::assignPCAtoTracksters(
-      tmpTracksters, input.layerClusters, rhtools_.getPositionLayer(rhtools_.lastLayerEE(type)).z());
+
+
+  ticl::assignPCAtoTracksters(tmpTracksters, 
+			      input.layerClusters, 
+			      input.layerClustersTime,
+			      rhtools_.getPositionLayer(rhtools_.lastLayerEE(type)).z());
 
   // run energy regression and ID
   energyRegressionAndID(input.layerClusters, tmpTracksters);
