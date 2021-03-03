@@ -25,6 +25,8 @@ PatternRecognitionbyCA<TILES>::PatternRecognitionbyCA(const edm::ParameterSet &c
       max_out_in_hops_(conf.getParameter<int>("max_out_in_hops")),
       min_cos_theta_(conf.getParameter<double>("min_cos_theta")),
       min_cos_pointing_(conf.getParameter<double>("min_cos_pointing")),
+      maxLayer_costheta_(conf.getParameter<int>("maxLayer_costheta")),
+      maxLayer_cospointing_(conf.getParameter<int>("maxLayer_cospointing")),
       root_doublet_max_distance_from_seed_squared_(
           conf.getParameter<double>("root_doublet_max_distance_from_seed_squared")),
       etaLimitIncreaseWindow_(conf.getParameter<double>("etaLimitIncreaseWindow")),
@@ -84,6 +86,7 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
 
   bool isRegionalIter = (input.regions[0].index != -1);
   std::vector<HGCDoublet::HGCntuplet> foundNtuplets;
+  std::vector<unsigned int> outInHopsV;
   std::vector<int> seedIndices;
   std::vector<uint8_t> layer_cluster_usage(input.layerClusters.size(), 0);
   theGraph_->makeAndConnectDoublets(input.tiles,
@@ -97,13 +100,16 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
                                     1,
                                     min_cos_theta_,
                                     min_cos_pointing_,
+                                    maxLayer_costheta_,
+                                    maxLayer_cospointing_,
                                     root_doublet_max_distance_from_seed_squared_,
                                     etaLimitIncreaseWindow_,
                                     skip_layers_,
                                     rhtools_.lastLayer(type),
                                     max_delta_time_);
 
-  theGraph_->findNtuplets(foundNtuplets, seedIndices, min_clusters_per_ntuplet_, out_in_dfs_, max_out_in_hops_);
+  theGraph_->findNtuplets(
+      foundNtuplets, seedIndices, min_clusters_per_ntuplet_, out_in_dfs_, max_out_in_hops_, outInHopsV);
   //#ifdef FP_DEBUG
   const auto &doublets = theGraph_->getAllDoublets();
   int tracksterId = -1;
@@ -181,14 +187,26 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
       //if a seeding region does not lead to any trackster
       tmp.setSeed(input.regions[0].collectionID, seedIndices[tracksterId]);
 
+      tmp.setOutInHopsPerformed(outInHopsV[tracksterId]);
+
+      // Propagate the correct graph connections
+      tmp.edges().reserve(ntuplet.size());
+      for (auto const & t : ntuplet) {
+        std::array<unsigned int, 2> edge = {{(unsigned int) doublets[t].innerClusterId(),
+                                            (unsigned int) doublets[t].outerClusterId()}};
+        tmp.edges().push_back(edge);
+      }
+
+      std::pair<float, float> timeTrackster(-99., -1.);
+      hgcalsimclustertime::ComputeClusterTime timeEstimator;
+      timeTrackster = timeEstimator.fixSizeHighestDensity(times, timeErrors);
+      tmp.setTimeAndError(timeTrackster.first, timeTrackster.second);
       std::copy(std::begin(effective_cluster_idx), std::end(effective_cluster_idx), std::back_inserter(tmp.vertices()));
       tmpTracksters.push_back(tmp);
     }
   }
-  ticl::assignPCAtoTracksters(tmpTracksters,
-                              input.layerClusters,
-                              input.layerClustersTime,
-                              rhtools_.getPositionLayer(rhtools_.lastLayerEE(type)).z());
+  ticl::assignPCAtoTracksters(
+      tmpTracksters, input.layerClusters, rhtools_.getPositionLayer(rhtools_.lastLayerEE(type)).z());
 
   // run energy regression and ID
   energyRegressionAndID(input.layerClusters, tmpTracksters);
@@ -292,6 +310,7 @@ void PatternRecognitionbyCA<TILES>::mergeTrackstersTRK(
         if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Basic) {
           LogDebug("HGCPatternRecoByCA") << "Updated size: " << updated_size << std::endl;
         }
+        outTrackster.setOutInHopsPerformed(outTrackster.outInHopsPerformed() + thisTrackster.outInHopsPerformed());
         outTrackster.vertices().reserve(updated_size);
         outTrackster.vertex_multiplicity().reserve(updated_size);
         std::copy(std::begin(thisTrackster.vertices()),
