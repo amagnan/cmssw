@@ -30,7 +30,7 @@ PatternRecognitionbyCA<TILES>::PatternRecognitionbyCA(const edm::ParameterSet &c
       etaLimitIncreaseWindow_(conf.getParameter<double>("etaLimitIncreaseWindow")),
       skip_layers_(conf.getParameter<int>("skip_layers")),
       max_missing_layers_in_trackster_(conf.getParameter<int>("max_missing_layers_in_trackster")),
-      check_missing_layers_(max_missing_layers_in_trackster_ >=0 || max_missing_layers_in_trackster_ < 100),
+      check_missing_layers_(max_missing_layers_in_trackster_ >=0 && max_missing_layers_in_trackster_ < 100),
       shower_start_max_layer_(conf.getParameter<int>("shower_start_max_layer")),
       min_layers_per_trackster_(conf.getParameter<int>("min_layers_per_trackster")),
       filter_on_categories_(conf.getParameter<std::vector<int>>("filter_on_categories")),
@@ -301,8 +301,8 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
 	LogDebug("HGCPatternRecoByCA") << " -- Longuest blob is " << selBlobs[0].first << " length " << selBlobs[0].second << std::endl;
       }
       
-      unsigned int previousEnd = 0;
-      unsigned int previousStart = 9999;
+
+      std::set<unsigned> usedLayers;
       for (unsigned iB(0); iB<nSplit; ++iB){//loop over the solutions and create tracksters
 	
 	unsigned int firstLayer = uniqueLayerIds[idxInVec[selBlobs[iB].first]];
@@ -311,12 +311,12 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
 		  << firstLayer << " to " << lastLayer ;
 
 	//keep only those not overlapping with previous ones.
-	if (lastLayer >= previousStart && firstLayer <= previousEnd){
+	if (std::find(usedLayers.begin(),usedLayers.end(),firstLayer)!=usedLayers.end() ||
+	    std::find(usedLayers.begin(),usedLayers.end(),lastLayer)!=usedLayers.end()){
 	  std::cout << " => Rejected ! " << std::endl;
 	  continue;
 	}
-	if (lastLayer > previousEnd) previousEnd = lastLayer;
-	if (firstLayer < previousStart) previousStart = firstLayer;
+	for (unsigned iL(firstLayer);iL<=lastLayer;++iL) usedLayers.insert(iL);
 	std::cout << " => Selected ! " << std::endl;
 	
 	std::set<unsigned int> selected_cluster_idx;
@@ -340,9 +340,6 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
 	//	<< " select trackster with " << numberOfLayersInTrackster << " layers" << std::endl;
       }//loop over passing solutions
     }//if tracksters split
-    else {
-      std::cout << " -- found 0 blobs passing length and start req." << std::endl;
-    }
   }//loop over pre-tracksters
 
   ticl::assignPCAtoTracksters(tmpTracksters,
