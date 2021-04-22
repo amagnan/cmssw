@@ -67,10 +67,10 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
     std::unordered_map<int, std::vector<int>> &seedToTracksterAssociation) {
   // Protect from events with no seeding regions
 
-  std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
-  	    << " empty = " << input.regions.empty()
-  	    << " skip= " << skip_layers_ << " max=" << max_missing_layers_in_trackster_
-  	    << std::endl;
+  //std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+  //	    << " empty = " << input.regions.empty()
+  //	    << " skip= " << skip_layers_ << " max=" << max_missing_layers_in_trackster_
+  //	    << std::endl;
   
 
 
@@ -122,9 +122,9 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
   std::vector<Trackster> tmpTracksters;
   tmpTracksters.reserve(foundNtuplets.size());
 
-  std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
-  	    << " found = " << foundNtuplets.size()
-  	    << std::endl;
+  //std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+  //	    << " found = " << foundNtuplets.size()
+  //	    << std::endl;
 
   for (auto const &ntuplet : foundNtuplets) {
     tracksterId++;
@@ -163,11 +163,11 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
     std::sort(uniqueLayerIds.begin(), uniqueLayerIds.end());
     uniqueLayerIds.erase(std::unique(uniqueLayerIds.begin(), uniqueLayerIds.end()), uniqueLayerIds.end());
     unsigned int numberOfLayersInTrackster = uniqueLayerIds.size();
-    std::cout << " --- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
-    	      << " trackster " << tracksterId 
-    	      << " with " << effective_cluster_idx.size() << " clusters and " 
-    	      << numberOfLayersInTrackster << " layers."
-    	      << std::endl;
+    //std::cout << " --- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+    //	      << " trackster " << tracksterId 
+    //	      << " with " << effective_cluster_idx.size() << " clusters and " 
+    //	      << numberOfLayersInTrackster << " layers."
+    //	      << std::endl;
 
     std::vector<unsigned int> idxInVec;
     std::vector<std::pair<unsigned,unsigned> > selBlobs;
@@ -176,6 +176,7 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
       unsigned int j = showerMinLayerId;
       unsigned int indexInVec = 0;
 
+      //decompose candidate into continuous blobs and missing chunks
       std::vector<unsigned int> nContinuous;
       std::vector<unsigned int> nMissing;
 
@@ -204,77 +205,71 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
       idxInVec.push_back(indexInVec-tmpCont);
 
       unsigned nBlobs = nContinuous.size();
-      std::cout << " - found " << nBlobs << " continuous blobs and " << nMissing.size() << " missing chunks: " ;
+      /*std::cout << " - found " << nBlobs << " continuous blobs and " << nMissing.size() << " missing chunks: " ;
       for (unsigned iB(0);iB<nBlobs-1;++iB){
 	std::cout << nContinuous[iB] << "-h" << nMissing[iB] << "h-";
       }
-      std::cout << nContinuous[nBlobs-1] << std::endl;
+      std::cout << nContinuous[nBlobs-1] << std::endl;*/
 
       if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
 	LogDebug("HGCPatternRecoByCA") << " - found " << nBlobs << " continuous blobs and " << nMissing.size() << " missing chunks." << std::endl;
       }
 
       if (nBlobs == 0){
-	//if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
-	//LogDebug("HGCPatternRecoByCA")
-	std::cout << " Problem, no blobs found, skipping check of missing layers."
-					 << std::endl;
-	//}
+	if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
+	  LogDebug("HGCPatternRecoByCA")
+	    << " Problem, no blobs found, skipping check of missing layers."
+	    << std::endl;
+	}
 	//AM-WhatToDo should exit ?? Should really not happen.
 	idxInVec.push_back(0);
 	continue;
       }
       if (nMissing.size() != (nBlobs-1)) {
-	//if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
-	//LogDebug("HGCPatternRecoByCA")
-	std::cout  << " Sizes not ok: found " << nBlobs 
-					 << " continuous blobs and " << nMissing.size() 
-					 << " missing chunks. Skipping check of missing layers."
-					 << std::endl;
-	//}
+	if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
+	  LogDebug("HGCPatternRecoByCA")
+	    << " Sizes not ok: found " << nBlobs 
+	    << " continuous blobs and " << nMissing.size() 
+	    << " missing chunks. Skipping check of missing layers."
+	    << std::endl;
+	}
 	//AM-WhatToDo should exit ?? Should really not happen.
 	continue;
       }
 
+      //find all individual and merged-within-max_missing blobs passing shower start and max length requirements
       unsigned idxBlob = 0;
       unsigned idxStop = 0;
       
-      //numberOfLayersInTrackster = nContinuous[0];
-
-      if (nBlobs>1){	
-	while (idxBlob < nBlobs){
-	  //first discard those not passing start_shower requirement
-	  unsigned int tmpFirst = uniqueLayerIds[idxInVec[idxBlob]];
-	  if (tmpFirst>shower_start_max_layer_){
-	    idxBlob++;
-	    continue;
-	  }
-	  idxStop = idxBlob;
-	  tmpMiss = nMissing[idxBlob];
-	  tmpCont = nContinuous[idxBlob];
-	  //push also the individual blobs if passing req...
-	  if (tmpCont >= min_layers_per_trackster_) {
-	    selBlobs.push_back(std::pair<unsigned int,unsigned int>(idxBlob,tmpCont));
-	  }
-	  if (idxBlob == nBlobs-1) break;
-	  while (static_cast<int>(tmpMiss)<=max_missing_layers_in_trackster_){
-	    idxStop++;
-	    tmpCont += nContinuous[idxStop];
-	    tmpMiss += nMissing[idxStop];
-	    if (idxStop == nBlobs-1) break;
-	  }
-	  //discard those not passing the length requirement
-	  if (tmpCont < min_layers_per_trackster_) {
-	    idxBlob++;
-	    continue;
-	  }
-
-	  selBlobs.push_back(std::pair<unsigned int,unsigned int>(idxBlob,tmpCont));
+      while (idxBlob < nBlobs){
+	//first discard those not passing start_shower requirement
+	unsigned int tmpFirst = uniqueLayerIds[idxInVec[idxBlob]];
+	if (tmpFirst>shower_start_max_layer_){
 	  idxBlob++;
+	  continue;
 	}
-      }//if more than 1 blob
-      else {
-	selBlobs.push_back(std::pair<unsigned int,unsigned int>(0,numberOfLayersInTrackster));
+	idxStop = idxBlob;
+	tmpMiss = nMissing[idxBlob];
+	tmpCont = nContinuous[idxBlob];
+	//push also the individual blobs if passing req...
+	if (tmpCont >= min_layers_per_trackster_) {
+	  selBlobs.push_back(std::pair<unsigned int,unsigned int>(idxBlob,tmpCont));
+	}
+	if (idxBlob == nBlobs-1) break;
+	while (static_cast<int>(tmpMiss)<=max_missing_layers_in_trackster_){
+	  idxStop++;
+	  tmpCont += nContinuous[idxStop];
+	  tmpMiss += nMissing[idxStop];
+	  if (idxStop == nBlobs-1) break;
+	}
+	//discard those not passing the length requirement
+	if (tmpCont < min_layers_per_trackster_) {
+	  idxBlob++;
+	  continue;
+	}
+	
+	selBlobs.push_back(std::pair<unsigned int,unsigned int>(idxBlob,tmpCont));
+	idxBlob++;
       }
     }//check_missing_layers
     else {
@@ -285,8 +280,10 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
     }
 
     unsigned nSplit = selBlobs.size();
+    
+    //std::cout << " -- Found " << nSplit << " blobs passing length and start req within max_missing." << std::endl;
 
-    std::cout << " -- Found " << nSplit << " blobs passing length and start req within max_missing." << std::endl;
+    //if candidates found, convert into tracksters starting from longest, but using blobs only once.
     if (nSplit>0){
 
       //sort blobs by length
@@ -307,17 +304,17 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
 	
 	unsigned int firstLayer = uniqueLayerIds[idxInVec[selBlobs[iB].first]];
 	unsigned int lastLayer = uniqueLayerIds[idxInVec[selBlobs[iB].first]+selBlobs[iB].second-1];
-	std::cout << " - Blob " << iB << " layers "
-		  << firstLayer << " to " << lastLayer ;
+	//std::cout << " - Blob " << iB << " layers "
+	//	  << firstLayer << " to " << lastLayer ;
 
 	//keep only those not overlapping with previous ones.
 	if (std::find(usedLayers.begin(),usedLayers.end(),firstLayer)!=usedLayers.end() ||
 	    std::find(usedLayers.begin(),usedLayers.end(),lastLayer)!=usedLayers.end()){
-	  std::cout << " => Rejected ! " << std::endl;
+	  //std::cout << " => Rejected ! " << std::endl;
 	  continue;
 	}
 	for (unsigned iL(firstLayer);iL<=lastLayer;++iL) usedLayers.insert(iL);
-	std::cout << " => Selected ! " << std::endl;
+	//std::cout << " => Selected ! " << std::endl;
 	
 	std::set<unsigned int> selected_cluster_idx;
 	for (auto &llpair : lcIdAndLayer) {
