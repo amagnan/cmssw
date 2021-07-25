@@ -84,11 +84,16 @@ void FilteredLayerClustersProducer::produce(edm::Event& evt, const edm::EventSet
   const auto& layerClusters = *clusterHandle;
   auto numLayerClusters = layerClusters.size();
   availableLayerClusters->reserve(numLayerClusters);
+
+  //std::cout << " -- AM-debug FilteredLayerClustersProducer " << iteration_label_ << " nLC= " << numLayerClusters << std::endl;
+
   for (unsigned int i = 0; i < numLayerClusters; ++i) {
     if (inputClusterMask[i] > 0.f) {
       availableLayerClusters->emplace_back(std::make_pair(i, inputClusterMask[i]));
     }
   }
+  //std::cout << " -- AM-debug FilteredLayerClustersProducer " << " nAvail = " 
+  //	    << availableLayerClusters->size() << std::endl;
 
   if (theFilter_) {
     theFilter_->filter(layerClusters, *availableLayerClusters, *layerClustersMask, rhtools_);

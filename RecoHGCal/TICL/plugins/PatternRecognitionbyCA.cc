@@ -66,6 +66,18 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
     std::vector<Trackster> &result,
     std::unordered_map<int, std::vector<int>> &seedToTracksterAssociation) {
   // Protect from events with no seeding regions
+
+  /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	    << " empty = " << input.regions.empty()
+	    << " verbosity = " << PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_
+	    << " enum = " 
+	    << PatternRecognitionAlgoBaseT<TILES>::None << ","
+	    << PatternRecognitionAlgoBaseT<TILES>::Basic << ","
+	    << PatternRecognitionAlgoBaseT<TILES>::Advanced << ","
+	    << PatternRecognitionAlgoBaseT<TILES>::Expert << ","
+	    << PatternRecognitionAlgoBaseT<TILES>::Guru 
+	    << std::endl;
+  */
   if (input.regions.empty())
     return;
 
@@ -117,6 +129,10 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
   std::vector<Trackster> tmpTracksters;
   tmpTracksters.reserve(foundNtuplets.size());
 
+  /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	    << " found = " << foundNtuplets.size()
+	    << std::endl;*/
+
   for (auto const &ntuplet : foundNtuplets) {
     tracksterId++;
 
@@ -154,6 +170,11 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
     std::sort(uniqueLayerIds.begin(), uniqueLayerIds.end());
     uniqueLayerIds.erase(std::unique(uniqueLayerIds.begin(), uniqueLayerIds.end()), uniqueLayerIds.end());
     unsigned int numberOfLayersInTrackster = uniqueLayerIds.size();
+    /*std::cout << " --- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	      << " trackster " << tracksterId 
+	      << " with " << effective_cluster_idx.size() << " clusters and " 
+	      << numberOfLayersInTrackster << " layers."
+	      << std::endl;*/
     if (check_missing_layers_) {
       int numberOfMissingLayers = 0;
       unsigned int j = showerMinLayerId;
@@ -163,6 +184,11 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
           numberOfMissingLayers++;
           j++;
           if (numberOfMissingLayers > max_missing_layers_in_trackster_) {
+	    /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+		      << " layer " << layer
+		      << " missingLayers = " << numberOfMissingLayers
+		      << " max = " << max_missing_layers_in_trackster_
+		      << std::endl;*/
             numberOfLayersInTrackster = indexInVec;
             for (auto &llpair : lcIdAndLayer) {
               if (llpair.second >= layer) {
@@ -190,6 +216,18 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
 
       std::copy(std::begin(effective_cluster_idx), std::end(effective_cluster_idx), std::back_inserter(tmp.vertices()));
       tmpTracksters.push_back(tmp);
+
+      //std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+      //	<< " select trackster with " << numberOfLayersInTrackster << " layers" << std::endl;
+    }
+    else {
+      /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+		<< " reject trackster with " << numberOfLayersInTrackster << " layers" 
+		<< " minL = " << min_layers_per_trackster_
+		<< " showerMinL = " << showerMinLayerId
+		<< " shower_start_max = " << shower_start_max_layer_
+		<< std::endl;*/
+
     }
   }
 
