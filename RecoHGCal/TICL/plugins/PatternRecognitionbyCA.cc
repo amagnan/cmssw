@@ -32,7 +32,7 @@ PatternRecognitionbyCA<TILES>::PatternRecognitionbyCA(const edm::ParameterSet &c
       etaLimitIncreaseWindow_(conf.getParameter<double>("etaLimitIncreaseWindow")),
       skip_layers_(conf.getParameter<int>("skip_layers")),
       max_missing_layers_in_trackster_(conf.getParameter<int>("max_missing_layers_in_trackster")),
-      check_missing_layers_(max_missing_layers_in_trackster_ < 100),
+      check_missing_layers_(max_missing_layers_in_trackster_ >=0 && max_missing_layers_in_trackster_ < 100),
       shower_start_max_layer_(conf.getParameter<int>("shower_start_max_layer")),
       min_layers_per_trackster_(conf.getParameter<int>("min_layers_per_trackster")),
       filter_on_categories_(conf.getParameter<std::vector<int>>("filter_on_categories")),
@@ -67,7 +67,7 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
     std::unordered_map<int, std::vector<int>> &seedToTracksterAssociation) {
   // Protect from events with no seeding regions
 
-  /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+  /*  std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
 	    << " empty = " << input.regions.empty()
 	    << " verbosity = " << PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_
 	    << " enum = " 
@@ -131,6 +131,7 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
 
   /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
 	    << " found = " << foundNtuplets.size()
+	    << " tmpTracksters size: " << tmpTracksters.size()
 	    << std::endl;*/
 
   for (auto const &ntuplet : foundNtuplets) {
@@ -170,67 +171,187 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
     std::sort(uniqueLayerIds.begin(), uniqueLayerIds.end());
     uniqueLayerIds.erase(std::unique(uniqueLayerIds.begin(), uniqueLayerIds.end()), uniqueLayerIds.end());
     unsigned int numberOfLayersInTrackster = uniqueLayerIds.size();
-    /*std::cout << " --- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+    /*    std::cout << " --- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
 	      << " trackster " << tracksterId 
 	      << " with " << effective_cluster_idx.size() << " clusters and " 
 	      << numberOfLayersInTrackster << " layers."
 	      << std::endl;*/
+
+
+    std::vector<unsigned int> idxInVec;
+    std::vector<std::pair<unsigned,unsigned> > selBlobs;
     if (check_missing_layers_) {
-      int numberOfMissingLayers = 0;
       unsigned int j = showerMinLayerId;
       unsigned int indexInVec = 0;
+
+      //decompose candidate into continuous blobs and missing chunks
+      std::vector<unsigned int> nContinuous;
+      std::vector<unsigned int> nMissing;
+
+      unsigned int tmpMiss = 0;
+      unsigned int tmpCont = 0;
       for (const auto &layer : uniqueLayerIds) {
-        if (layer != j) {
-          numberOfMissingLayers++;
-          j++;
-          if (numberOfMissingLayers > max_missing_layers_in_trackster_) {
-	    /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
-		      << " layer " << layer
-		      << " missingLayers = " << numberOfMissingLayers
-		      << " max = " << max_missing_layers_in_trackster_
-		      << std::endl;*/
-            numberOfLayersInTrackster = indexInVec;
-            for (auto &llpair : lcIdAndLayer) {
-              if (llpair.second >= layer) {
-                effective_cluster_idx.erase(llpair.first);
-              }
-            }
-            break;
-          }
-        }
-        indexInVec++;
-        j++;
+	if (layer > j) {
+	  nContinuous.push_back(tmpCont);
+	  idxInVec.push_back(indexInVec-tmpCont);
+	  tmpCont = 0;
+	  while (layer != j){
+	    tmpMiss++;
+	    j++;
+	  }
+	}
+	if (tmpCont==0 && tmpMiss>0){
+	  nMissing.push_back(tmpMiss);
+	  tmpMiss = 0;
+	}
+	tmpCont++;
+	indexInVec++;
+	j++;
       }
-    }
+      //push last one....
+      nContinuous.push_back(tmpCont);
+      idxInVec.push_back(indexInVec-tmpCont);
 
-    if ((numberOfLayersInTrackster >= min_layers_per_trackster_) and (showerMinLayerId <= shower_start_max_layer_)) {
-      // Put back indices, in the form of a Trackster, into the results vector
-      Trackster tmp;
-      tmp.vertices().reserve(effective_cluster_idx.size());
-      tmp.vertex_multiplicity().resize(effective_cluster_idx.size(), 1);
-      //regions and seedIndices can have different size
-      //if a seeding region does not lead to any trackster
-      tmp.setSeed(input.regions[0].collectionID, seedIndices[tracksterId]);
+      unsigned nBlobs = nContinuous.size();
 
-      tmp.setOutInHopsPerformed(outInHopsV[tracksterId]);
+      if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
+	LogDebug("HGCPatternRecoByCA") << " - found " << nBlobs << " continuous blobs and " << nMissing.size() << " missing chunks." << std::endl;
+      }
+      
+      if (nBlobs == 0){
+	if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
+	  LogDebug("HGCPatternRecoByCA")
+	    << " Problem, no blobs found, skipping check of missing layers."
+	    << std::endl;
+	}
+	//AM-WhatToDo should exit ?? Should really not happen.
+	continue;
+      }
+      if (nMissing.size() != (nBlobs-1)) {
+	if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
+	LogDebug("HGCPatternRecoByCA")
+	  << " Sizes not ok: found " << nBlobs 
+	  << " continuous blobs and " << nMissing.size() 
+	  << " missing chunks. Skipping check of missing layers."
+	  << std::endl;
+	}
+	//AM-WhatToDo should exit ?? Should really not happen.
+	continue;
+      }
 
-      std::copy(std::begin(effective_cluster_idx), std::end(effective_cluster_idx), std::back_inserter(tmp.vertices()));
-      tmpTracksters.push_back(tmp);
-
-      //std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
-      //	<< " select trackster with " << numberOfLayersInTrackster << " layers" << std::endl;
-    }
+      //find all individual and merged-within-max_missing blobs passing shower start and max length requirements
+      unsigned idxBlob = 0;
+      unsigned idxStop = 0;
+      
+      while (idxBlob < nBlobs){
+	//first discard those not passing start_shower requirement
+	unsigned int tmpFirst = uniqueLayerIds[idxInVec[idxBlob]];
+	if (tmpFirst>shower_start_max_layer_){
+	  idxBlob++;
+	  continue;
+	}
+	tmpCont = nContinuous[idxBlob];
+	//push also the individual blobs if passing req...
+	if (tmpCont >= min_layers_per_trackster_) {
+	  selBlobs.push_back(std::pair<unsigned int,unsigned int>(idxBlob,tmpCont));
+	}
+	if (idxBlob == nBlobs-1) break;
+	idxStop = idxBlob;
+	tmpMiss = nMissing[idxBlob];
+	while (static_cast<int>(tmpMiss)<=max_missing_layers_in_trackster_){
+	  idxStop++;
+	  tmpCont += nContinuous[idxStop];
+	  tmpMiss += nMissing[idxStop];
+	  if (idxStop == nBlobs-1) break;
+	}
+	//discard those not passing the length requirement
+	if (tmpCont < min_layers_per_trackster_) {
+	  idxBlob++;
+	  continue;
+	}
+	
+	selBlobs.push_back(std::pair<unsigned int,unsigned int>(idxBlob,tmpCont));
+	idxBlob++;
+      }
+    }//check_missing_layers
     else {
-      /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
-		<< " reject trackster with " << numberOfLayersInTrackster << " layers" 
-		<< " minL = " << min_layers_per_trackster_
-		<< " showerMinL = " << showerMinLayerId
-		<< " shower_start_max = " << shower_start_max_layer_
-		<< std::endl;*/
-
+      if ((numberOfLayersInTrackster >= min_layers_per_trackster_) and (showerMinLayerId <= shower_start_max_layer_)) {
+	idxInVec.push_back(0);
+	selBlobs.push_back(std::pair<unsigned int,unsigned int>(0,numberOfLayersInTrackster));
+      }
+      // else {
+	/*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	  << " reject trackster with " << numberOfLayersInTrackster << " layers" 
+	  << " minL = " << min_layers_per_trackster_
+	  << " showerMinL = " << showerMinLayerId
+	  << " shower_start_max = " << shower_start_max_layer_
+	  << std::endl;*/
+	
+      //}
+      
     }
+
+    unsigned nSplit = selBlobs.size();
+
+    //if candidates found, convert into tracksters starting from longest, but using blobs only once.
+    if (nSplit>0){
+
+      //sort blobs by length
+      std::sort(selBlobs.begin(),selBlobs.end(),
+		[](const std::pair<unsigned,unsigned> &x,
+		   const std::pair<unsigned,unsigned> &y)
+		{
+		  return (x.second==y.second)? x.first<y.first : x.second > y.second;
+		});
+      
+      if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
+	LogDebug("HGCPatternRecoByCA") << " -- Longuest blob is " << selBlobs[0].first << " length " << selBlobs[0].second << std::endl;
+      }
+      
+
+      std::set<unsigned> usedLayers;
+      for (unsigned iB(0); iB<nSplit; ++iB){//loop over the solutions and create tracksters
+	
+	unsigned int firstLayer = uniqueLayerIds[idxInVec[selBlobs[iB].first]];
+	unsigned int lastLayer = uniqueLayerIds[idxInVec[selBlobs[iB].first]+selBlobs[iB].second-1];
+
+	//keep only those not overlapping with previous ones.
+	if (std::find(usedLayers.begin(),usedLayers.end(),firstLayer)!=usedLayers.end() ||
+	    std::find(usedLayers.begin(),usedLayers.end(),lastLayer)!=usedLayers.end()){
+	  continue;
+	}
+	for (unsigned iL(firstLayer);iL<=lastLayer;++iL) usedLayers.insert(iL);
+	
+	std::set<unsigned int> selected_cluster_idx;
+	for (auto &llpair : lcIdAndLayer) {
+	  if (llpair.second >= firstLayer && llpair.second <= lastLayer) {
+	    selected_cluster_idx.insert(llpair.first);
+	  }
+	}
+	
+	// Put back indices, in the form of a Trackster, into the results vector
+	Trackster tmp;
+	tmp.vertices().reserve(selected_cluster_idx.size());
+	tmp.vertex_multiplicity().resize(selected_cluster_idx.size(), 1);
+	//regions and seedIndices can have different size
+	//if a seeding region does not lead to any trackster
+	tmp.setSeed(input.regions[0].collectionID, seedIndices[tracksterId]);
+	tmp.setOutInHopsPerformed(outInHopsV[tracksterId]);
+	
+	std::copy(std::begin(selected_cluster_idx), std::end(selected_cluster_idx), std::back_inserter(tmp.vertices()));
+	tmpTracksters.push_back(tmp);
+	//std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	//<< " select trackster with " << numberOfLayersInTrackster << " layers" << std::endl;
+	
+      }//loop over passing solutions
+    }//if tracksters split
+
   }
 
+
+  /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	    << " size of tmpTracksters: " << tmpTracksters.size()
+	    << std::endl;*/
 
   ticl::assignPCAtoTracksters(tmpTracksters, 
 			      input.layerClusters, 
@@ -286,12 +407,22 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
                                        << " count: " << (int)trackster.vertex_multiplicity(i) << std::endl;
     }
   }
+
+
+  /*  std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	    << " size of result before mergeTrackstersTRK: " << result.size()
+	    << std::endl;*/
+
   // Now decide if the tracksters from the track-based iterations have to be merged
   if (oneTracksterPerTrackSeed_) {
     std::vector<Trackster> tmp;
     mergeTrackstersTRK(result, input.layerClusters, tmp, seedToTracksterAssociation);
     tmp.swap(result);
   }
+
+  /*  std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	    << " size of result after mergeTrackstersTRK: " << result.size()
+	    << std::endl;*/
 
   ticl::assignPCAtoTracksters(
       result, input.layerClusters, input.layerClustersTime, rhtools_.getPositionLayer(rhtools_.lastLayerEE(type)).z());
@@ -304,6 +435,11 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
   if (promoteEmptyRegionToTrackster_) {
     emptyTrackstersFromSeedsTRK(result, seedToTracksterAssociation, input.regions[0].collectionID);
   }
+
+  /*std::cout << " -- AM-debug PatternRecognitionbyCA<TILES>::makeTracksters "
+	    << " size of result after promote empty region: " << result.size()
+	    << std::endl;*/
+
 
   if (PatternRecognitionAlgoBaseT<TILES>::algo_verbosity_ > PatternRecognitionAlgoBaseT<TILES>::Advanced) {
     for (auto &trackster : result) {
