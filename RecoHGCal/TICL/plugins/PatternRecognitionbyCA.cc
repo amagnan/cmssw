@@ -371,13 +371,14 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
     for (auto index : filter_on_categories_) {
       cumulative_prob += t.id_probabilities(index);
     }
-    return (cumulative_prob <= pid_threshold_) &&
-           (t.raw_em_energy() < energy_em_over_total_threshold_ * t.raw_energy());
+    //return (cumulative_prob <= pid_threshold_) &&
+    //     (t.raw_em_energy() < energy_em_over_total_threshold_ * t.raw_energy());
+    return (cumulative_prob <= pid_threshold_);
   };
 
   std::vector<unsigned int> selectedTrackstersIds;
   for (unsigned i = 0; i < tmpTracksters.size(); ++i) {
-    if (!filter_on_pids(tmpTracksters[i]) and tmpTracksters[i].sigmasPCA()[0] < max_longitudinal_sigmaPCA_) {
+    if (!filter_on_pids(tmpTracksters[i]) and (tmpTracksters[i].sigmasPCA()[0] < max_longitudinal_sigmaPCA_) and (tmpTracksters[i].raw_em_energy() > energy_em_over_total_threshold_ * tmpTracksters[i].raw_energy() ) ) {
       selectedTrackstersIds.push_back(i);
     }
   }

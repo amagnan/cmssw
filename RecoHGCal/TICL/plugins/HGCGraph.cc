@@ -6,6 +6,7 @@
 #include "HGCDoublet.h"
 #include "HGCGraph.h"
 #include "DataFormats/Common/interface/ValueMap.h"
+#include "DataFormats/Math/interface/deltaR.h"
 
 #include <algorithm> // std::max
 
@@ -91,6 +92,7 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
         int currentOuterLayerId = currentInnerLayerId + 1 + outer_layer;
         auto const &outerLayerHisto = histo[currentOuterLayerId];
         auto const &innerLayerHisto = histo[currentInnerLayerId];
+	float deltaZ = 0.f;
         const int etaLimitIncreaseWindowBin = innerLayerHisto.etaBin(etaLimitIncreaseWindow);
         if (verbosity_ > Advanced) {
           LogDebug("HGCGraph") << "Limit of Eta for increase: " << etaLimitIncreaseWindow
@@ -160,7 +162,22 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
                         LogDebug("HGCGraph") << "Rejecting doublets due to timing!" << std::endl;
                       continue;
                     }
-                    allDoublets_.emplace_back(innerClusterId, outerClusterId, doubletId, &layerClusters, r.index);
+		    
+		    if (currentOuterLayerId - currentInnerLayerId == 1){ 
+		      if(deltaZ == 0)
+			{
+			  deltaZ = layerClusters[outerClusterId].z() - layerClusters[innerClusterId].z();
+			}
+		      if(areOverlappingOnSiblingLayers(innerClusterId,outerClusterId, layerClusters,6.e-4f*deltaZ))
+			{
+			  allDoublets_.emplace_back(innerClusterId, outerClusterId, doubletId, &layerClusters, r.index, true);  
+			} 
+		      else {
+			continue;
+		      }
+		    } else {
+		      allDoublets_.emplace_back(innerClusterId, outerClusterId, doubletId, &layerClusters, r.index);
+		    }
                     if (verbosity_ > Advanced) {
                       LogDebug("HGCGraph")
                           << "Creating doubletsId: " << doubletId << " layerLink in-out: [" << currentInnerLayerId
@@ -187,12 +204,10 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
                                                                               maxLayerCosPointing,
                                                                               verbosity_ > Advanced);
                     if (isRootDoublet and checkDistanceRootDoubletVsSeed) {
-                      auto dEtaSquared = (layerClusters[innerClusterId].eta() - origin_eta);
-                      dEtaSquared *= dEtaSquared;
-                      auto dPhiSquared = (layerClusters[innerClusterId].phi() - origin_phi);
-                      dPhiSquared *= dPhiSquared;
-                      if (dEtaSquared + dPhiSquared > root_doublet_max_distance_from_seed_squared)
+                      auto dRSquared = reco::deltaR2(layerClusters[innerClusterId].eta(),layerClusters[innerClusterId].phi(),origin_eta,origin_phi);
+                      if (dRSquared > root_doublet_max_distance_from_seed_squared) {
                         isRootDoublet = false;
+		      }
                     }
                     if (isRootDoublet) {
                       theRootDoublets_.push_back(doubletId);
@@ -226,6 +241,16 @@ bool HGCGraphT<TILES>::areTimeCompatible(int innerIdx,
 
   return (timeIn == -99. || timeOut == -99. ||
           std::abs(timeIn - timeOut) < maxDeltaTime * sqrt(timeInE * timeInE + timeOutE * timeOutE));
+}
+
+template <typename TILES>
+bool HGCGraphT<TILES>::areOverlappingOnSiblingLayers(int innerIdx,
+						     int outerIdx,
+						     const std::vector<reco::CaloCluster> &layerClusters,
+						     float maxRSquared) {
+  
+  float dR = reco::deltaR2(layerClusters[outerIdx].eta(),layerClusters[outerIdx].phi(),layerClusters[innerIdx].eta(),layerClusters[innerIdx].phi()); 
+  return ( dR < maxRSquared);
 }
 
 //also return a vector of seedIndex for the reconstructed tracksters
