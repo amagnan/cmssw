@@ -41,6 +41,7 @@ namespace ticl {
     const int maxLayer_cospointing_;
     const float root_doublet_max_distance_from_seed_squared_;
     const float etaLimitIncreaseWindow_;
+    const int layerLimitIncreaseWindow_;
     const int skip_layers_;
     const int max_missing_layers_in_trackster_;
     bool check_missing_layers_ = false;

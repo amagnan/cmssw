@@ -30,6 +30,7 @@ PatternRecognitionbyCA<TILES>::PatternRecognitionbyCA(const edm::ParameterSet &c
       root_doublet_max_distance_from_seed_squared_(
           conf.getParameter<double>("root_doublet_max_distance_from_seed_squared")),
       etaLimitIncreaseWindow_(conf.getParameter<double>("etaLimitIncreaseWindow")),
+      layerLimitIncreaseWindow_(conf.getParameter<int>("layerLimitIncreaseWindow")),
       skip_layers_(conf.getParameter<int>("skip_layers")),
       max_missing_layers_in_trackster_(conf.getParameter<int>("max_missing_layers_in_trackster")),
       check_missing_layers_(max_missing_layers_in_trackster_ >=0 && max_missing_layers_in_trackster_ < 100),
@@ -122,7 +123,7 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
                                     maxLayer_cospointing_,
                                     root_doublet_max_distance_from_seed_squared_,
                                     etaLimitIncreaseWindow_,
-				    rhtools_.firstLayerBH(),
+				    layerLimitIncreaseWindow_,//rhtools_.firstLayerBH(),
                                     skip_layers_,
                                     rhtools_.lastLayer(type),
                                     max_delta_time_);

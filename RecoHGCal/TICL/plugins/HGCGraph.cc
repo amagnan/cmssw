@@ -101,7 +101,7 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
 	  if (il >= layerLimitIncreaseWindow-2) {
 	    etaWindow+=3;
 	    phiWindow+=3;
-	    LogDebug("HGCGraph") << "Limit of layer for increase: " << layerLimitIncreaseWindow
+	    LogDebug("HGCGraph") << "Limit of layer for increase: " << layerLimitIncreaseWindow-2
 				 << " reached! Increasing inner search window" << std::endl;
 	  }
 	  startEtaBin = std::max(entryEtaBin - etaWindow, 0);
@@ -188,12 +188,12 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
                       continue;
                     }
 		    
-		    if (currentOuterLayerId - currentInnerLayerId == 1){ 
+		    if ( (il >= layerLimitIncreaseWindow-2) && (currentOuterLayerId - currentInnerLayerId == 1) ){ 
 		      if(deltaZ == 0)
 			{
 			  deltaZ = layerClusters[outerClusterId].z() - layerClusters[innerClusterId].z();
 			}
-		      if(areOverlappingOnSiblingLayers(innerClusterId,outerClusterId, layerClusters,6.e-4f*deltaZ))
+		      if(areOverlappingOnSiblingLayers(innerClusterId,outerClusterId, layerClusters,1.e-2f*deltaZ))
 			{
 			  allDoublets_.emplace_back(innerClusterId, outerClusterId, doubletId, &layerClusters, r.index, true);  
 			} 
