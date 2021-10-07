@@ -93,6 +93,12 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
   }
 
   int type = input.tiles[0].typeT();
+
+  /*std::cout << " - AM-debug type " << type 
+	    << " last layer " << rhtools_.lastLayer(type)
+	    << " firstLayerBH " << rhtools_.firstLayerBH()
+	    << std::endl;*/
+
   int nEtaBin = (type == 1) ? ticl::TileConstantsHFNose::nEtaBins : ticl::TileConstants::nEtaBins;
   int nPhiBin = (type == 1) ? ticl::TileConstantsHFNose::nPhiBins : ticl::TileConstants::nPhiBins;
 
@@ -116,6 +122,7 @@ void PatternRecognitionbyCA<TILES>::makeTracksters(
                                     maxLayer_cospointing_,
                                     root_doublet_max_distance_from_seed_squared_,
                                     etaLimitIncreaseWindow_,
+				    rhtools_.firstLayerBH(),
                                     skip_layers_,
                                     rhtools_.lastLayer(type),
                                     max_delta_time_);

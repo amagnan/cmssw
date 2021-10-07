@@ -26,6 +26,7 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
 					      int maxLayerCosPointing,
                                               float root_doublet_max_distance_from_seed_squared,
                                               float etaLimitIncreaseWindow,
+                                              int layerLimitIncreaseWindow,
                                               int skip_layers,
                                               int maxNumberOfLayers,
                                               float maxDeltaTime) {
@@ -39,13 +40,15 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
   for (const auto &r : regions) {
     bool isGlobal = (r.index == -1);
     auto zSide = r.zSide;
-    int startEtaBin, endEtaBin, startPhiBin, endPhiBin;
+    int startEtaBin=0, endEtaBin=nEtaBins, startPhiBin=0, endPhiBin=nPhiBins;
 
+    int entryEtaBin = 0;
+    int entryPhiBin = 0;
     if (isGlobal) {
-      startEtaBin = 0;
-      startPhiBin = 0;
-      endEtaBin = nEtaBins;
-      endPhiBin = nPhiBins;
+      //startEtaBin = 0;
+      //startPhiBin = 0;
+      //endEtaBin = nEtaBins;
+      //endPhiBin = nPhiBins;
       origin_eta = 0;
       origin_phi = 0;
     } else {
@@ -53,31 +56,18 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
       const auto &firstLayerHisto = histo[firstLayerOnZSide];
       origin_eta = r.origin.eta();
       origin_phi = r.origin.phi();
-      int entryEtaBin = firstLayerHisto.etaBin(origin_eta);
-      int entryPhiBin = firstLayerHisto.phiBin(origin_phi);
+      entryEtaBin = firstLayerHisto.etaBin(origin_eta);
+      entryPhiBin = firstLayerHisto.phiBin(origin_phi);
       // For track-seeded iterations, if the impact point is below a certain
       // eta-threshold, i.e., it has higher eta, make the initial search
       // window bigger in both eta and phi by one bin, to contain better low
       // energy showers.
-      auto etaWindow = deltaIEta;
-      auto phiWindow = deltaIPhi;
-      if (std::abs(origin_eta) > etaLimitIncreaseWindow) {
-        etaWindow++;
-        phiWindow++;
-        LogDebug("HGCGraph") << "Limit of Eta for increase: " << etaLimitIncreaseWindow
-                             << " reached! Increasing inner search window" << std::endl;
-      }
-      startEtaBin = std::max(entryEtaBin - etaWindow, 0);
-      endEtaBin = std::min(entryEtaBin + etaWindow + 1, nEtaBins);
-      startPhiBin = entryPhiBin - phiWindow;
-      endPhiBin = entryPhiBin + phiWindow + 1;
       if (verbosity_ > Guru) {
         LogDebug("HGCGraph") << " Entrance eta, phi: " << origin_eta << ", " << origin_phi
                              << " entryEtaBin: " << entryEtaBin << " entryPhiBin: " << entryPhiBin
                              << " globalBin: " << firstLayerHisto.globalBin(origin_eta, origin_phi)
-                             << " on layer: " << firstLayerOnZSide << " startEtaBin: " << startEtaBin
-                             << " endEtaBin: " << endEtaBin << " startPhiBin: " << startPhiBin
-                             << " endPhiBin: " << endPhiBin << " phiBin(0): " << firstLayerHisto.phiBin(0.)
+                             << " on layer: " << firstLayerOnZSide 
+                             << " phiBin(0): " << firstLayerHisto.phiBin(0.)
                              << " phiBin(" << M_PI / 2. << "): " << firstLayerHisto.phiBin(M_PI / 2.) << " phiBin("
                              << M_PI << "): " << firstLayerHisto.phiBin(M_PI) << " phiBin(" << -M_PI / 2.
                              << "): " << firstLayerHisto.phiBin(-M_PI / 2.) << " phiBin(" << -M_PI
@@ -98,6 +88,34 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
           LogDebug("HGCGraph") << "Limit of Eta for increase: " << etaLimitIncreaseWindow
                                << " at etaBin: " << etaLimitIncreaseWindowBin << std::endl;
         }
+
+	if (!isGlobal){
+	  auto etaWindow = deltaIEta;
+	  auto phiWindow = deltaIPhi;
+	  if (std::abs(origin_eta) > etaLimitIncreaseWindow) {
+	    etaWindow++;
+	    phiWindow++;
+	    LogDebug("HGCGraph") << "Limit of Eta for increase: " << etaLimitIncreaseWindow
+				 << " reached! Increasing inner search window" << std::endl;
+	  }
+	  if (il >= layerLimitIncreaseWindow-2) {
+	    etaWindow+=3;
+	    phiWindow+=3;
+	    LogDebug("HGCGraph") << "Limit of layer for increase: " << layerLimitIncreaseWindow
+				 << " reached! Increasing inner search window" << std::endl;
+	  }
+	  startEtaBin = std::max(entryEtaBin - etaWindow, 0);
+	  endEtaBin = std::min(entryEtaBin + etaWindow + 1, nEtaBins);
+	  startPhiBin = entryPhiBin - phiWindow;
+	  endPhiBin = entryPhiBin + phiWindow + 1;
+	  if (verbosity_ > Guru) {
+	    LogDebug("HGCGraph") << " on layer: " << il << " startEtaBin: " << startEtaBin
+				 << " endEtaBin: " << endEtaBin << " startPhiBin: " << startPhiBin
+				 << " endPhiBin: " << endPhiBin
+				 << std::endl;
+	  }
+	}
+
 
         for (int ieta = startEtaBin; ieta < endEtaBin; ++ieta) {
           auto offset = ieta * nPhiBins;
@@ -128,6 +146,13 @@ void HGCGraphT<TILES>::makeAndConnectDoublets(const TILES &histo,
                 phiWindow++;
                 if (verbosity_ > Advanced) {
                   LogDebug("HGCGraph") << "Eta and Phi window increased by one" << std::endl;
+                }
+              }
+              if (isGlobal && il >= layerLimitIncreaseWindow-2) {
+                etaWindow+=3;
+                phiWindow+=3;
+                if (verbosity_ > Advanced) {
+                  LogDebug("HGCGraph") << "Eta and Phi window increased by 3" << std::endl;
                 }
               }
               const auto etaRangeMin = std::max(0, ieta - etaWindow);

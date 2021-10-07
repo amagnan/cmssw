@@ -29,6 +29,7 @@ public:
 			      int maxLayerCosPointing,
                               float root_doublet_max_distance_from_seed_squared,
                               float etaLimitIncreaseWindow,
+			      int layerLimitIncreaseWindow,
                               int skip_layers,
                               int maxNumberOfLayers,
                               float maxDeltaTime);
