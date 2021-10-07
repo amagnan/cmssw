@@ -125,7 +125,7 @@ void TrackstersProducer::fillDescriptions(edm::ConfigurationDescriptions& descri
   desc.add<int>("skip_layers", 0);
   desc.add<int>("max_missing_layers_in_trackster", 9999);
   desc.add<double>("etaLimitIncreaseWindow", 2.1);
-  desc.add<int>("layerLimitIncreaseWindow", 50);//disabled by default: used for both increase window size by +/-3 and use deltaR(eta-phi) on consecutive layers to make doublets
+  desc.add<int>("layerLimitIncreaseWindow", 999);//disabled by default: used for both increase window size by +/-3 and use deltaR(eta-phi) on consecutive layers to make doublets
   desc.add<int>("min_layers_per_trackster", 10);
   desc.add<double>("max_delta_time", 3.);  //nsigma
   desc.add<bool>("out_in_dfs", true);
