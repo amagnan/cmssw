@@ -9,6 +9,8 @@
 #include "Geometry/CaloGeometry/interface/CaloGeometry.h"
 #include "Geometry/Records/interface/CaloGeometryRecord.h"
 #include "Geometry/Records/interface/IdealGeometryRecord.h"
+#include "Geometry/HGCalCommonData/interface/HGCalCellOffset.h"
+#include "Geometry/HGCalCommonData/interface/HGCalWaferType.h"
 
 #include "FWCore/Framework/interface/ESHandle.h"
 
@@ -31,6 +33,47 @@ namespace {
       throw cms::Exception("hgcal::RecHitTools") << "Geometry not provided yet to hgcal::RecHitTools!";
     }
   }
+  
+  template <typename DDD>
+  inline HGCalCellOffset getCellOffset(const DDD* ddd){
+    bool boolreco = true;
+    double waferSize = ddd->waferSize(boolreco);//CAMM- bool reco...?
+    int32_t nFine = (ddd->getParameter())->nCellsFine_;
+    int32_t nCoarse = (ddd->getParameter())->nCellsCoarse_;
+    double GROffset = (ddd->getParameter())->guardRingOffset_;
+    double MBCut = (ddd->getParameter())->mouseBite_;
+    double sizeOffset = ddd->sensorSizeOffset(boolreco);     
+    /*std::cout << "---Initialising cell offset parameters: "
+	      << " waferSize " << waferSize
+	      << " nFine " << nFine
+	      << " nCoarse " << nCoarse
+	      << " GROffset " << GROffset
+	      << " MBCut " << MBCut
+              << " sizeOffset " << sizeOffset
+	      << std::endl;
+    */
+    
+    return HGCalCellOffset(waferSize,nFine,nCoarse,GROffset,MBCut,sizeOffset);  
+  }
+
+  //C-AMM make method without using detid
+  inline const HGCalDDDConstants* get_ddd(const CaloSubdetectorGeometry* geom) {
+    const HGCalGeometry* hg = static_cast<const HGCalGeometry*>(geom);
+    const HGCalDDDConstants* ddd = &(hg->topology().dddConstants());
+    check_ddd(ddd);
+    return ddd;
+  }
+
+  
+  
+  //C-AMM What is the point of the second argument ? It is not used....
+  inline const HGCalDDDConstants* get_ddd(const CaloSubdetectorGeometry* geom, const DetId& detid) {
+    const HGCalGeometry* hg = static_cast<const HGCalGeometry*>(geom);
+    const HGCalDDDConstants* ddd = &(hg->topology().dddConstants());
+    check_ddd(ddd);
+    return ddd;
+  }
+
 
   inline const HGCalDDDConstants* get_ddd(const CaloSubdetectorGeometry* geom, const HGCalDetId& detid) {
     const HGCalGeometry* hg = static_cast<const HGCalGeometry*>(geom);
@@ -77,12 +120,15 @@ namespace {
 }  // namespace
 
 void RecHitTools::setGeometry(const CaloGeometry& geom) {
+  if (geom_) return;
   geom_ = &geom;
+  bool boolreco = true;
   unsigned int wmaxEE(0), wmaxFH(0);
   auto geomEE = static_cast<const HGCalGeometry*>(
       geom_->getSubdetectorGeometry(DetId::HGCalEE, ForwardSubdetector::ForwardEmpty));
   //check if it's the new geometry
   if (geomEE) {
+    auto ddd = get_ddd(geomEE);
     geometryType_ = 1;
     eeOffset_ = (geomEE->topology().dddConstants()).getLayerOffset();
     wmaxEE = (geomEE->topology().dddConstants()).waferCount(0);
@@ -101,6 +147,7 @@ void RecHitTools::setGeometry(const CaloGeometry& geom) {
     geometryType_ = 0;
     geomEE =
         static_cast<const HGCalGeometry*>(geom_->getSubdetectorGeometry(DetId::Forward, ForwardSubdetector::HGCEE));
+    auto ddd = get_ddd(geomEE);
     eeOffset_ = (geomEE->topology().dddConstants()).getLayerOffset();
     wmaxEE = 1 + (geomEE->topology().dddConstants()).waferMax();
     auto geomFH =
@@ -232,6 +279,17 @@ int RecHitTools::getSiThickIndex(const DetId& id) const {
   }
   return thickIndex;
 }
+
+float RecHitTools::getScintArea(const DetId& id) const {
+  if (!isScintillator(id)) {
+    LogDebug("getScintDEtaDPhi::InvalidScintDetid")
+        << "det id: " << std::hex << id.rawId() << std::dec << ":" << id.det() << " is not HGCal scintillator!";
+    return 0.f;
+  }
+  auto cellGeom = static_cast<const HGCalGeometry*>(getSubdetectorGeometry(id));
+  return cellGeom->getArea(id);
+}
+
 
 std::pair<float, float> RecHitTools::getScintDEtaDPhi(const DetId& id) const {
   if (!isScintillator(id)) {
@@ -427,6 +485,37 @@ std::pair<int, int> RecHitTools::getCell(const DetId& id) const {
   }
   return std::pair<int, int>(cellU, cellV);
 }
+
+//Cell size in mm^2
+float  RecHitTools::getCellArea(const DetId& id) const {
+  bool boolreco = true;
+  auto lGeom = getSubdetectorGeometry(id);
+  auto ddd = get_ddd(lGeom, id);
+  auto cellOffset = getCellOffset(ddd);
+  
+  //for scintillator
+  if (!isSilicon(id)){
+    return getScintArea(id);
+  } else {
+    //for silicon
+    int lzside = zside(id);
+    int layer = getLayer(id);
+    int layertype = ddd->layerType(layer);
+    int lfrontBack = HGCalTypes::layerFrontBack(layertype);
+    int lindex = HGCalWaferIndex::waferIndex(layer, getWafer(id).first, getWafer(id).second);
+    int lorient = HGCalWaferType::getOrient(lindex, (ddd->getParameter())->waferInfoMap_);
+    int lplaceIndex = HGCalCell::cellPlacementIndex(lzside, lfrontBack, lorient);
+    int lwaferType = HGCalWaferType::getType(lindex, (ddd->getParameter())->waferInfoMap_);
+
+    return cellOffset.cellAreaUV(RecHitTools::getCell(id).first,
+				 RecHitTools::getCell(id).second,
+				 lplaceIndex,
+				 lwaferType,
+				 boolreco
+				 );
+  }
+};
+
 
 bool RecHitTools::isHalfCell(const DetId& id) const {
   bool ishalf = false;

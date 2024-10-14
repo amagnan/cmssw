@@ -38,6 +38,14 @@ void HGCalCLUEAlgoT<T, STRATEGY>::populate(const HGCRecHitCollection& hits) {
     DetId detid = hgrh.detid();
     unsigned int layerOnSide = (rhtools_.getLayerWithOffset(detid) - 1);
 
+    //C-AMM get cell area and check it is not 0
+    float cellArea = doDensity_? rhtools_.getCellArea(detid) : 0;
+    if (doDensity_ && cellArea<=0){
+      edm::LogError("HGCalCLUEAlgo::InvalidCellArea")
+        << "det id: " << std::hex << detid.rawId() << std::dec << ":" << detid.det() << " has cell area = " << cellArea;
+      //C-AMM this should probably never happen so should fail and stop the processing ?
+    }
+
     // set sigmaNoise default value 1 to use kappa value directly in case of
     // sensor-independent thresholds
     float sigmaNoise = 1.f;
@@ -52,6 +60,7 @@ void HGCalCLUEAlgoT<T, STRATEGY>::populate(const HGCRecHitCollection& hits) {
       }
       sigmaNoise = v_sigmaNoise_[layerOnSide][thickness_index];
 
+      //C-AMM the noise should be stored also depending on cell size/type when available
       if (hgrh.energy() < storedThreshold)
         continue;  // this sets the ZS threshold at ecut times the sigma noise
                    // for the sensor
@@ -74,7 +83,9 @@ void HGCalCLUEAlgoT<T, STRATEGY>::populate(const HGCRecHitCollection& hits) {
       cells_[layer].dim1.emplace_back(position.x());
       cells_[layer].dim2.emplace_back(position.y());
     }
-    cells_[layer].weight.emplace_back(hgrh.energy());
+    //C-AMM here replace by proper density using the cell area
+    cells_[layer].energy.emplace_back(hgrh.energy());
+    cells_[layer].weight.emplace_back(doDensity_?hgrh.energy()/cellArea:hgrh.energy());
     cells_[layer].sigmaNoise.emplace_back(sigmaNoise);
   }
 }
@@ -83,6 +94,7 @@ template <typename T, typename STRATEGY>
 void HGCalCLUEAlgoT<T, STRATEGY>::prepareDataStructures(unsigned int l) {
   auto cellsSize = cells_[l].detid.size();
   cells_[l].rho.resize(cellsSize, 0.f);
+  cells_[l].rhoE.resize(cellsSize, 0.f);
   cells_[l].delta.resize(cellsSize, 9999999);
   cells_[l].nearestHigher.resize(cellsSize, -1);
   cells_[l].clusterIndex.resize(cellsSize, -1);
@@ -168,6 +180,7 @@ std::vector<reco::BasicCluster> HGCalCLUEAlgoT<T, STRATEGY>::getClusters(bool) {
       float maxEnergyValue = std::numeric_limits<float>::min();
       int maxEnergyCellIndex = -1;
       DetId maxEnergyDetId;
+      //math::XYZPoint position = math::XYZPoint(0.f, 0.f, 0.f);
       float energy = 0.f;
       int seedDetId = -1;
       float x = 0.f;
@@ -175,9 +188,11 @@ std::vector<reco::BasicCluster> HGCalCLUEAlgoT<T, STRATEGY>::getClusters(bool) {
       float z = cellsOnLayer.layerDim3;
       // TODO Felice: maybe use the seed for the position calculation
       for (auto cellIdx : cl) {
-        energy += cellsOnLayer.weight[cellIdx];
-        if (cellsOnLayer.weight[cellIdx] > maxEnergyValue) {
-          maxEnergyValue = cellsOnLayer.weight[cellIdx];
+	//C-AMM use energy here, and not weight which is now energy/area...
+        energy += cellsOnLayer.energy[cellIdx];
+        //energy += cellsOnLayer.weight[cellIdx];
+        if (cellsOnLayer.energy[cellIdx] > maxEnergyValue) {
+          maxEnergyValue = cellsOnLayer.energy[cellIdx];
           maxEnergyCellIndex = cellIdx;
           maxEnergyDetId = cellsOnLayer.detid[cellIdx];
         }
@@ -187,8 +202,8 @@ std::vector<reco::BasicCluster> HGCalCLUEAlgoT<T, STRATEGY>::getClusters(bool) {
         }
       }
 
-      float total_weight_log = 0.f;
-      float total_weight = energy;
+      float total_energy_log = 0.f;
+      float total_energy = energy;
 
       if constexpr (std::is_same_v<STRATEGY, HGCalSiliconStrategy>) {
         auto thick = rhtools_.getSiThickIndex(maxEnergyDetId);
@@ -196,28 +211,28 @@ std::vector<reco::BasicCluster> HGCalCLUEAlgoT<T, STRATEGY>::getClusters(bool) {
           const float d1 = cellsOnLayer.dim1[cellIdx] - cellsOnLayer.dim1[maxEnergyCellIndex];
           const float d2 = cellsOnLayer.dim2[cellIdx] - cellsOnLayer.dim2[maxEnergyCellIndex];
           if ((d1 * d1 + d2 * d2) < positionDeltaRho2_) {
-            float Wi = std::max(thresholdW0_[thick] + std::log(cellsOnLayer.weight[cellIdx] / energy), 0.);
+            float Wi = std::max(thresholdW0_[thick] + std::log(cellsOnLayer.energy[cellIdx] / energy), 0.);
             x += cellsOnLayer.dim1[cellIdx] * Wi;
             y += cellsOnLayer.dim2[cellIdx] * Wi;
-            total_weight_log += Wi;
+            total_energy_log += Wi;
           }
         }
       } else {
         for (auto cellIdx : cl) {
           auto position = rhtools_.getPosition(cellsOnLayer.detid[cellIdx]);
-          x += position.x() * cellsOnLayer.weight[cellIdx];
-          y += position.y() * cellsOnLayer.weight[cellIdx];
+          x += position.x() * cellsOnLayer.energy[cellIdx];
+          y += position.y() * cellsOnLayer.energy[cellIdx];
         }
       }
 
       if constexpr (std::is_same_v<STRATEGY, HGCalSiliconStrategy>) {
-        total_weight = total_weight_log;
+        total_energy = total_energy_log;
       }
 
-      if (total_weight != 0.) {
-        float inv_tot_weight = 1.f / total_weight;
-        x *= inv_tot_weight;
-        y *= inv_tot_weight;
+      if (total_energy != 0.) {
+        float inv_tot_energy = 1.f / total_energy;
+        x *= inv_tot_energy;
+        y *= inv_tot_energy;
       } else {
         x = cellsOnLayer.dim1[maxEnergyCellIndex];
         y = cellsOnLayer.dim2[maxEnergyCellIndex];
@@ -257,14 +272,16 @@ void HGCalCLUEAlgoT<T, STRATEGY>::calculateLocalDensity(const T& lt,
         for (unsigned int j = 0; j < binSize; j++) {
           unsigned int otherId = lt[binId][j];
           if (distance(lt, i, otherId, layerId) < delta) {
+	    //C-AMM why 0.5, but OK, give a larger weight to the cell proportional to the weight in the closest neighbours.
             cellsOnLayer.rho[i] += (i == otherId ? 1.f : 0.5f) * cellsOnLayer.weight[otherId];
+            cellsOnLayer.rhoE[i] += (i == otherId ? 1.f : 0.5f) * cellsOnLayer.energy[otherId];
           }
         }
       }
     }
     LogDebug("HGCalCLUEAlgo") << "Debugging calculateLocalDensity: \n"
                               << "  cell: " << i << " eta: " << cellsOnLayer.dim1[i] << " phi: " << cellsOnLayer.dim2[i]
-                              << " energy: " << cellsOnLayer.weight[i] << " density: " << cellsOnLayer.rho[i] << "\n";
+                              << " energy/area: " << cellsOnLayer.weight[i] << " density: " << cellsOnLayer.rho[i] << "\n";
   }
 }
 template <typename T, typename STRATEGY>
@@ -280,7 +297,9 @@ void HGCalCLUEAlgoT<T, STRATEGY>::calculateLocalDensity(const T& lt,
                                                  cellsOnLayer.dim2[i] - delta,
                                                  cellsOnLayer.dim2[i] + delta);
     cellsOnLayer.rho[i] += cellsOnLayer.weight[i];
+    cellsOnLayer.rhoE[i] += cellsOnLayer.energy[i];
     float northeast(0), northwest(0), southeast(0), southwest(0), all(0);
+    float northeastE(0), northwestE(0), southeastE(0), southwestE(0), allE(0);
     for (int etaBin = search_box[0]; etaBin < search_box[1] + 1; ++etaBin) {
       for (int phiBin = search_box[2]; phiBin < search_box[3] + 1; ++phiBin) {
         int phi = (phiBin % T::type::nRows);
@@ -299,22 +318,32 @@ void HGCalCLUEAlgoT<T, STRATEGY>::calculateLocalDensity(const T& lt,
                                     : -scintMaxIphi_;  // cells with iPhi=288 and iPhi=1 should be neiboring cells
             int dIEta = otherIEta - iEta;
             LogDebug("HGCalCLUEAlgo") << "  Debugging calculateLocalDensity for Scintillator: \n"
-                                      << "    cell: " << otherId << " energy: " << cellsOnLayer.weight[otherId]
+                                      << "    cell: " << otherId << " energy/area: " << cellsOnLayer.weight[otherId]
                                       << " otherIPhi: " << otherIPhi << " iPhi: " << iPhi << " otherIEta: " << otherIEta
                                       << " iEta: " << iEta << "\n";
 
             if (otherId != i) {
               auto neighborCellContribution = 0.5f * cellsOnLayer.weight[otherId];
+              auto neighborCellContributionE = 0.5f * cellsOnLayer.energy[otherId];
               all += neighborCellContribution;
-              if (dIPhi >= 0 && dIEta >= 0)
+              allE += neighborCellContributionE;
+              if (dIPhi >= 0 && dIEta >= 0){
                 northeast += neighborCellContribution;
-              if (dIPhi <= 0 && dIEta >= 0)
+                northeastE += neighborCellContributionE;
+	      }
+              if (dIPhi <= 0 && dIEta >= 0){
                 southeast += neighborCellContribution;
-              if (dIPhi >= 0 && dIEta <= 0)
+                southeastE += neighborCellContributionE;
+	      }
+              if (dIPhi >= 0 && dIEta <= 0){
                 northwest += neighborCellContribution;
-              if (dIPhi <= 0 && dIEta <= 0)
+                northwestE += neighborCellContributionE;
+	      }
+              if (dIPhi <= 0 && dIEta <= 0){
                 southwest += neighborCellContribution;
-            }
+                southwestE += neighborCellContributionE;
+	      }
+	    }
             LogDebug("HGCalCLUEAlgo") << "  Debugging calculateLocalDensity for Scintillator: \n"
                                       << "    northeast: " << northeast << " southeast: " << southeast
                                       << " northwest: " << northwest << " southwest: " << southwest << "\n";
@@ -325,13 +354,20 @@ void HGCalCLUEAlgoT<T, STRATEGY>::calculateLocalDensity(const T& lt,
     float neighborsval = (std::max(northeast, northwest) > std::max(southeast, southwest))
                              ? std::max(northeast, northwest)
                              : std::max(southeast, southwest);
-    if (use2x2_)
+    float neighborsvalE = (std::max(northeastE, northwestE) > std::max(southeastE, southwestE))
+                             ? std::max(northeastE, northwestE)
+                             : std::max(southeastE, southwestE);
+    if (use2x2_){
       cellsOnLayer.rho[i] += neighborsval;
-    else
+      cellsOnLayer.rhoE[i] += neighborsvalE;
+    }
+    else{
       cellsOnLayer.rho[i] += all;
+      cellsOnLayer.rhoE[i] += allE;
+    }
     LogDebug("HGCalCLUEAlgo") << "Debugging calculateLocalDensity: \n"
                               << "  cell: " << i << " eta: " << cellsOnLayer.dim1[i] << " phi: " << cellsOnLayer.dim2[i]
-                              << " energy: " << cellsOnLayer.weight[i] << " density: " << cellsOnLayer.rho[i] << "\n";
+                              << " energy/area: " << cellsOnLayer.weight[i] << " density: " << cellsOnLayer.rho[i] << "\n";
   }
 }
 template <typename T, typename STRATEGY>
@@ -373,6 +409,7 @@ void HGCalCLUEAlgoT<T, STRATEGY>::calculateDistanceToHigher(const T& lt, const u
         for (unsigned int j = 0; j < binSize; j++) {
           unsigned int otherId = lt[binId][j];
           float dist = distance2(lt, i, otherId, layerId);
+	  //C-AMM why compare the detids ??
           bool foundHigher =
               (cellsOnLayer.rho[otherId] > cellsOnLayer.rho[i]) ||
               (cellsOnLayer.rho[otherId] == cellsOnLayer.rho[i] && cellsOnLayer.detid[otherId] > cellsOnLayer.detid[i]);
@@ -383,7 +420,9 @@ void HGCalCLUEAlgoT<T, STRATEGY>::calculateDistanceToHigher(const T& lt, const u
               ((dist == i_delta) && (cellsOnLayer.rho[otherId] == rho_max) &&
                (cellsOnLayer.detid[otherId] > cellsOnLayer.detid[i]))) {
             rho_max = cellsOnLayer.rho[otherId];
+            // update i_delta
             i_delta = dist;
+            // update i_nearestHigher
             i_nearestHigher = otherId;
           }
         }
@@ -402,7 +441,7 @@ void HGCalCLUEAlgoT<T, STRATEGY>::calculateDistanceToHigher(const T& lt, const u
 
     LogDebug("HGCalCLUEAlgo") << "Debugging calculateDistanceToHigher: \n"
                               << "  cell: " << i << " eta: " << cellsOnLayer.dim1[i] << " phi: " << cellsOnLayer.dim2[i]
-                              << " energy: " << cellsOnLayer.weight[i] << " density: " << cellsOnLayer.rho[i]
+                              << " energy/area: " << cellsOnLayer.weight[i] << " density: " << cellsOnLayer.rho[i]
                               << " nearest higher: " << cellsOnLayer.nearestHigher[i]
                               << " distance: " << cellsOnLayer.delta[i] << "\n";
   }
@@ -423,8 +462,9 @@ int HGCalCLUEAlgoT<T, STRATEGY>::findAndAssignClusters(const unsigned int layerI
     float rho_c = kappa_ * cellsOnLayer.sigmaNoise[i];
     // initialize clusterIndex
     cellsOnLayer.clusterIndex[i] = -1;
-    bool isSeed = (cellsOnLayer.delta[i] > delta) && (cellsOnLayer.rho[i] >= rho_c);
-    bool isOutlier = (cellsOnLayer.delta[i] > outlierDeltaFactor_ * delta) && (cellsOnLayer.rho[i] < rho_c);
+    //C-AMM rho is now using proper density: need to adjust rho_c
+    bool isSeed = (cellsOnLayer.delta[i] > delta) && (cellsOnLayer.rhoE[i] >= rho_c);
+    bool isOutlier = (cellsOnLayer.delta[i] > outlierDeltaFactor_ * delta) && (cellsOnLayer.rhoE[i] < rho_c);
     if (isSeed) {
       cellsOnLayer.clusterIndex[i] = nClustersOnLayer;
       cellsOnLayer.isSeed[i] = true;

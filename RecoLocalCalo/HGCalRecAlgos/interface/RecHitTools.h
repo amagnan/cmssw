@@ -31,7 +31,8 @@ namespace hgcal {
           fhLastLayer_(0),
           noseLastLayer_(0),
           geometryType_(0) {}
-    ~RecHitTools() {}
+    ~RecHitTools() {
+    }
 
     void setGeometry(CaloGeometry const&);
     const CaloSubdetectorGeometry* getSubdetectorGeometry(const DetId& id) const;
@@ -45,6 +46,7 @@ namespace hgcal {
     std::float_t getRadiusToSide(const DetId&) const;
     int getSiThickIndex(const DetId&) const;
 
+    float getScintArea(const DetId&) const;
     std::pair<float, float> getScintDEtaDPhi(const DetId&) const;
 
     unsigned int getLayer(DetId::Detector type, bool nose = false) const;
@@ -55,6 +57,8 @@ namespace hgcal {
     std::pair<int, int> getWafer(const DetId&) const;
     std::pair<int, int> getCell(const DetId&) const;
 
+    float getCellArea(const DetId&) const;
+    
     bool isHalfCell(const DetId&) const;
 
     bool isSilicon(const DetId&) const;
@@ -87,6 +91,7 @@ namespace hgcal {
     bool maskCell(const DetId& id, int corners = 3) const;
 
   private:
+    
     const CaloGeometry* geom_;
     unsigned int eeOffset_, fhOffset_, bhFirstLayer_, bhLastLayer_, bhOffset_, fhLastLayer_, noseLastLayer_;
     unsigned int maxNumberOfWafersPerLayer_, maxNumberOfWafersNose_;
@@ -96,3 +101,5 @@ namespace hgcal {
 }  // namespace hgcal
 
 #endif
+
+
