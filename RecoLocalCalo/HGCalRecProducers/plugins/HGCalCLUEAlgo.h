@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include <limits>
+#include <set>
 
 #define DEBUG_CLUSTERS_ALPAKA 0
 
@@ -39,6 +40,7 @@ public:
             (HGCalClusteringAlgoBase::VerbosityLevel)ps.getUntrackedParameter<unsigned int>("verbosity", 3),
             reco::CaloCluster::undefined),
         vecDeltas_(ps.getParameter<std::vector<double>>("deltac")),
+	doDensity_(ps.getParameter<bool>("doDensity")),
         kappa_(ps.getParameter<double>("kappa")),
         ecut_(ps.getParameter<double>("ecut")),
         dependSensor_(ps.getParameter<bool>("dependSensor")),
@@ -99,6 +101,7 @@ public:
                                        1.3,
                                        0.0315,  // for scintillator
                                    });
+    iDesc.add<bool>("doDensity", false);
     iDesc.add<bool>("dependSensor", true);
     iDesc.add<double>("ecut", 3.0);
     iDesc.add<double>("kappa", 9.0);
@@ -130,6 +133,7 @@ public:
 private:
   // The two parameters used to identify clusters
   std::vector<double> vecDeltas_;
+  bool doDensity_;
   double kappa_;
 
   // The hit energy cutoff
@@ -164,7 +168,9 @@ private:
     std::vector<float> dim1;
     std::vector<float> dim2;
 
+    std::vector<float> energy;
     std::vector<float> weight;
+    std::vector<float> rhoE;
     std::vector<float> rho;
 
     std::vector<float> delta;
@@ -179,8 +185,10 @@ private:
       detid.clear();
       dim1.clear();
       dim2.clear();
+      energy.clear();
       weight.clear();
       rho.clear();
+      rhoE.clear();
       delta.clear();
       nearestHigher.clear();
       clusterIndex.clear();
@@ -193,8 +201,10 @@ private:
       detid.shrink_to_fit();
       dim1.shrink_to_fit();
       dim2.shrink_to_fit();
+      energy.shrink_to_fit();
       weight.shrink_to_fit();
       rho.shrink_to_fit();
+      rhoE.shrink_to_fit();
       delta.shrink_to_fit();
       nearestHigher.shrink_to_fit();
       clusterIndex.shrink_to_fit();
